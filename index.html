@@ -1,0 +1,239 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Money Saving Tracker</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f0f7f2;
+    margin: 0;
+    padding: 30px 15px;
+    text-align: center;
+    color: #263b30;
+}
+h1 { color: #176b45; }
+.card {
+    background: white;
+    max-width: 600px;
+    margin: 20px auto;
+    padding: 25px;
+    border-radius: 16px;
+    box-shadow: 0 4px 15px #00000012;
+}
+button {
+    background: #198754;
+    color: white;
+    border: none;
+    padding: 12px 18px;
+    margin: 5px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+button:hover { background: #146c43; }
+button:disabled { background: #789b87; cursor: not-allowed; }
+input {
+    padding: 10px;
+    margin: 8px;
+    width: 75%;
+    max-width: 250px;
+    border: 1px solid #ccc;
+    border-radius: 7px;
+}
+.remove-button { background: #c0392b; }
+#calendar {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+    margin-top: 15px;
+}
+.day {
+    padding: 12px 2px;
+    border-radius: 8px;
+    background: #eee;
+    font-size: 13px;
+}
+.completed { background: #c8f0d4; color: #176b45; }
+.pending { background: #ffe1df; color: #9d3028; }
+.weekday { font-weight: bold; background: transparent; }
+.small { color: #65756b; font-size: 14px; }
+</style>
+</head>
+
+<body>
+<h1>My Money Saving Tracker</h1>
+
+<div class="card">
+    <h2>Daily Target: ₹10</h2>
+    <p id="status">Today's target is pending.</p>
+    <button id="saveButton" onclick="completeSaving()">✓ Complete Today's Target</button>
+
+    <h2>Total Savings: ₹<span id="total">0.00</span></h2>
+    <p>Completed days: <strong id="completedDays">0</strong></p>
+</div>
+
+<div class="card">
+    <h2>Add Extra Money</h2>
+    <input type="number" id="addAmount" min="0.01" step="0.01" placeholder="Amount in ₹">
+    <button onclick="addMoney()">+ Add Money</button>
+
+    <h2>Remove Money</h2>
+    <input type="number" id="removeAmount" min="0.01" step="0.01" placeholder="Amount in ₹">
+    <button class="remove-button" onclick="removeMoney()">− Remove Money</button>
+
+    <p id="message" aria-live="polite"></p>
+</div>
+
+<div class="card">
+    <h2>Daily Savings History</h2>
+    <p class="small">Green = completed · Red = pending</p>
+    <h3 id="monthTitle"></h3>
+    <div id="calendar"></div>
+</div>
+
+<script>
+const dailyTarget = 10;
+
+let totalSavings = Number(localStorage.getItem("totalSavings")) || 0;
+let lastSavedDate = localStorage.getItem("lastSavedDate") || "";
+let history = JSON.parse(localStorage.getItem("savingHistory") || "{}");
+
+function dateKey(date = new Date()) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
+
+function saveData() {
+    localStorage.setItem("totalSavings", totalSavings.toFixed(2));
+    localStorage.setItem("lastSavedDate", lastSavedDate);
+    localStorage.setItem("savingHistory", JSON.stringify(history));
+    updateDisplay();
+}
+
+function showMessage(message) {
+    document.getElementById("message").textContent = message;
+}
+
+function completeSaving() {
+    const today = dateKey();
+
+    if (history[today]) {
+        showMessage("You have already completed today's target.");
+        return;
+    }
+
+    history[today] = { target: dailyTarget, amount: dailyTarget };
+    totalSavings += dailyTarget;
+    lastSavedDate = today;
+
+    saveData();
+    showMessage("Great job! ₹10 saved for today.");
+}
+
+function addMoney() {
+    const input = document.getElementById("addAmount");
+    const amount = Number(input.value);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+        showMessage("Enter an amount greater than ₹0.");
+        return;
+    }
+
+    totalSavings = Math.round((totalSavings + amount) * 100) / 100;
+    saveData();
+    input.value = "";
+    showMessage("₹" + amount.toFixed(2) + " added.");
+}
+
+function removeMoney() {
+    const input = document.getElementById("removeAmount");
+    const amount = Number(input.value);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+        showMessage("Enter an amount greater than ₹0.");
+        return;
+    }
+
+    if (amount > totalSavings) {
+        showMessage("You cannot remove more than your total savings.");
+        return;
+    }
+
+    if (!confirm("Remove ₹" + amount.toFixed(2) + " from your balance?")) {
+        return;
+    }
+
+    totalSavings = Math.round((totalSavings - amount) * 100) / 100;
+    saveData();
+    input.value = "";
+    showMessage("₹" + amount.toFixed(2) + " removed.");
+}
+
+function updateDisplay() {
+    document.getElementById("total").textContent = totalSavings.toFixed(2);
+    document.getElementById("completedDays").textContent = Object.keys(history).length;
+
+    const completed = Boolean(history[dateKey()]);
+    document.getElementById("status").textContent = completed
+        ? "Today's target is completed! Great job!"
+        : "Today's target is pending.";
+
+    const button = document.getElementById("saveButton");
+    button.disabled = completed;
+    button.textContent = completed ? "✓ Target Completed" : "✓ Complete Today's Target";
+
+    renderCalendar();
+}
+
+function renderCalendar() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    document.getElementById("monthTitle").textContent =
+        now.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+
+    const calendar = document.getElementById("calendar");
+    calendar.innerHTML = "";
+
+    ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].forEach(name => {
+        const cell = document.createElement("div");
+        cell.className = "day weekday";
+        cell.textContent = name;
+        calendar.appendChild(cell);
+    });
+
+    for (let i = 0; i < firstDay; i++) {
+        calendar.appendChild(document.createElement("div"));
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, month, day);
+        const key = dateKey(date);
+        const cell = document.createElement("div");
+        const isCompleted = Boolean(history[key]);
+
+        cell.className = "day " + (isCompleted ? "completed" : "pending");
+        cell.textContent = day + (isCompleted ? " ✓" : "");
+        cell.title = isCompleted
+            ? "Target completed"
+            : (date > now ? "Future date" : "Target pending");
+
+        calendar.appendChild(cell);
+    }
+}
+
+updateDisplay();
+</script>
+</body>
+</html>
+
+
+
